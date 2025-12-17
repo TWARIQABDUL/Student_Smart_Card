@@ -46,6 +46,9 @@ repositories {
 }
 
 dependencies {
+    val room_version = "2.6.1"
+    implementation ("androidx.room:room-runtime:$room_version")
     // 2. Import the AAR by name (without the path)
-    implementation(mapOf("name" to "card-emulator-release", "ext" to "aar"))
+    implementation(mapOf("name" to "card-emulator-debug", "ext" to "aar"))
+
 }

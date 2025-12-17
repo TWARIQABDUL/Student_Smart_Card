@@ -9,6 +9,8 @@
     <!-- this will be removed on production-->
 
     <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
 
     <application
         android:label="student_card_app"
