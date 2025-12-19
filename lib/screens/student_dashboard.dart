@@ -2,9 +2,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:provider/provider.dart'; // 👈 Import Provider
 import '../models/user_model.dart';
 import '../services/smart_card_service.dart';
-import 'student_history_screen.dart'; // <--- Import the History Screen
+import '../services/theme_manager.dart'; // 👈 Import Theme Manager
+import 'student_history_screen.dart';
+import 'login_screen.dart'; // For Logout
 
 class StudentDashboard extends StatefulWidget {
   final User user;
@@ -32,7 +35,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
 
   Future<void> _checkHardware() async {
     int status = await _cardService.checkNfcStatus();
-    setState(() => _nfcStatus = status);
+    if (mounted) setState(() => _nfcStatus = status);
 
     if (status == 0 && widget.user.isActive) {
       _activateCard();
@@ -42,27 +45,41 @@ class _StudentDashboardState extends State<StudentDashboard> {
   Future<void> _activateCard() async {
     if (_nfcStatus != 0) return;
     String result = await _cardService.activateCard(widget.user);
-    setState(() => _isActive = (result == "Card Activated" || result == "Success"));
+    if (mounted) setState(() => _isActive = (result == "Card Activated" || result == "Success"));
   }
 
   Future<void> _deactivateCard() async {
     await _cardService.deactivateCard();
-    setState(() => _isActive = false);
+    if (mounted) setState(() => _isActive = false);
+  }
+
+  void _handleLogout() {
+    // 1. Reset Theme to Default
+    Provider.of<ThemeManager>(context, listen: false).resetTheme();
+
+    // 2. Navigate back to Login
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+    );
   }
 
   // --- MAIN BUILD ---
   @override
   Widget build(BuildContext context) {
+    // 🎨 LISTEN TO THEME
+    final theme = Provider.of<ThemeManager>(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F111A),
+      backgroundColor: theme.backgroundColor, // 👈 Dynamic Background
 
       // 1. SWITCH BETWEEN PAGES
-      // We use IndexedStack so the Wallet state (Active/Inactive) doesn't reset when switching tabs
       body: IndexedStack(
         index: _selectedIndex,
         children: [
-          _buildWalletPage(),       // Index 0: Your Home Screen
-          const StudentHistoryScreen(), // Index 1: The History Screen
+          _buildWalletPage(theme),     // Pass theme to widgets
+          const StudentHistoryScreen(),
         ],
       ),
 
@@ -72,9 +89,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
           border: Border(top: BorderSide(color: Colors.white10, width: 1)),
         ),
         child: BottomNavigationBar(
-          backgroundColor: const Color(0xFF0F111A),
+          backgroundColor: theme.backgroundColor, // 👈 Dynamic Nav Bar
           elevation: 0,
-          selectedItemColor: const Color(0xFF3D5CFF), // Your Brand Blue
+          selectedItemColor: theme.primaryColor,  // 👈 Dynamic Active Icon
           unselectedItemColor: Colors.white38,
           selectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold),
           unselectedLabelStyle: GoogleFonts.poppins(),
@@ -97,16 +114,25 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  // --- WALLET PAGE (Your Original UI) ---
-  Widget _buildWalletPage() {
-    return Scaffold( // Nested Scaffold allows us to keep the AppBar specific to this page
-      backgroundColor: const Color(0xFF0F111A),
+  // --- WALLET PAGE ---
+  Widget _buildWalletPage(ThemeManager theme) {
+    return Scaffold(
+      backgroundColor: theme.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text("My Wallet", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: Text(
+          widget.user.campus?.name ?? "My Wallet",
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         centerTitle: true,
-        automaticallyImplyLeading: false, // Hide back button
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            onPressed: _handleLogout,
+          )
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -115,7 +141,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
             const SizedBox(height: 10),
             _buildNfcStatusChip(),
             const SizedBox(height: 25),
-            _buildDigitalCard(),
+            _buildDigitalCard(theme), // 👈 Pass Theme
             const SizedBox(height: 40),
 
             // Action Button
@@ -126,7 +152,10 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 child: ElevatedButton(
                   onPressed: _isActive ? _deactivateCard : _activateCard,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _isActive ? Colors.redAccent.withOpacity(0.2) : const Color(0xFF3D5CFF),
+                    // 👈 Dynamic Button Colors
+                    backgroundColor: _isActive
+                        ? Colors.redAccent.withOpacity(0.2)
+                        : theme.primaryColor,
                     foregroundColor: _isActive ? Colors.redAccent : Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     elevation: _isActive ? 0 : 8,
@@ -144,7 +173,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  // --- HELPERS (Unchanged) ---
+  // --- HELPERS ---
   Widget _buildNfcStatusChip() {
     Color color = Colors.grey;
     String text = "CHECKING...";
@@ -182,10 +211,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  Widget _buildDigitalCard() {
+  Widget _buildDigitalCard(ThemeManager theme) {
     return Stack(
       alignment: Alignment.center,
       children: [
+        // 1. ACTIVE GLOW EFFECT (Only visible when NFC is ON)
         if (_isActive)
           Positioned(
             bottom: -10,
@@ -193,26 +223,45 @@ class _StudentDashboardState extends State<StudentDashboard> {
               width: 280,
               height: 50,
               decoration: BoxDecoration(
-                color: const Color(0xFF3D5CFF).withOpacity(0.6),
+                color: theme.primaryColor.withOpacity(0.6),
                 borderRadius: BorderRadius.circular(50),
-                boxShadow: [const BoxShadow(color: Color(0xFF3D5CFF), blurRadius: 40, spreadRadius: 5)],
+                boxShadow: [
+                  BoxShadow(
+                      color: theme.primaryColor,
+                      blurRadius: 40,
+                      spreadRadius: 5
+                  )
+                ],
               ),
             ),
           ),
+
+        // 2. THE CARD ITSELF
         Container(
           height: 220,
           width: double.infinity,
           padding: const EdgeInsets.all(25),
           decoration: BoxDecoration(
+            // 🚀 FIX: Always use Theme Colors (removed the _isActive check for colors)
             gradient: LinearGradient(
-              colors: _isActive
-                  ? [const Color(0xFF3D5CFF), const Color(0xFF2B45B5)]
-                  : [const Color(0xFF2A2D3E), const Color(0xFF1E202C)],
+              colors: [theme.primaryColor, theme.secondaryColor],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: _isActive ? Colors.blueAccent.withOpacity(0.5) : Colors.white10, width: 1),
+            // Add a subtle border to make it pop
+            border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1
+            ),
+            // Add a permanent subtle shadow so it looks like a card
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 15,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,27 +269,68 @@ class _StudentDashboardState extends State<StudentDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(_nfcStatus == 2 ? Icons.no_sim_outlined : Icons.sim_card, color: _nfcStatus == 2 ? Colors.redAccent : Colors.amber, size: 40),
-                  Icon(Icons.contactless, color: _isActive ? Colors.white : Colors.white24, size: 30),
+                  // SIM Chip Icon
+                  Icon(
+                      _nfcStatus == 2 ? Icons.no_sim_outlined : Icons.sim_card,
+                      // Turn red if hardware error, otherwise Gold
+                      color: _nfcStatus == 2 ? Colors.redAccent : Colors.amber,
+                      size: 40
+                  ),
+                  // Contactless Icon (Always visible now, just simpler)
+                  const Icon(Icons.contactless, color: Colors.white54, size: 30),
                 ],
               ),
               const Spacer(),
-              Text("\$${widget.user.walletBalance.toStringAsFixed(2)}", style: GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+
+              // Balance
+              Text(
+                  "\$${widget.user.walletBalance.toStringAsFixed(2)}",
+                  style: GoogleFonts.poppins(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: theme.cardTextColor
+                  )
+              ),
               const SizedBox(height: 5),
+
+              // Name and QR
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.user.name.toUpperCase(), style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
-                      Text(widget.user.role, style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12)),
+                      Text(
+                          widget.user.name.toUpperCase(),
+                          style: GoogleFonts.poppins(
+                              color: theme.cardTextColor,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16
+                          )
+                      ),
+                      Text(
+                        // Display Campus Name
+                          widget.user.campus?.name ?? widget.user.role,
+                          style: GoogleFonts.poppins(
+                              color: theme.cardTextColor.withOpacity(0.8),
+                              fontSize: 12
+                          )
+                      ),
                     ],
                   ),
+                  // QR Code
                   Container(
                     padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
-                    child: QrImageView(data: widget.user.nfcToken, size: 40, padding: EdgeInsets.zero, backgroundColor: Colors.white),
+                    decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8)
+                    ),
+                    child: QrImageView(
+                        data: widget.user.nfcToken,
+                        size: 45,
+                        padding: EdgeInsets.zero,
+                        backgroundColor: Colors.white
+                    ),
                   )
                 ],
               )

@@ -1,11 +1,12 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart'; // 👈 IMPORT PROVIDER
 import '../services/auth_service.dart';
 import '../services/smart_card_service.dart';
+import '../services/theme_manager.dart'; // 👈 IMPORT THEME MANAGER
 import '../models/user_model.dart';
 import 'student_dashboard.dart';
-// --- NEW IMPORTS ---
 import 'forgot_password_screen.dart';
 import 'change_first_password_screen.dart';
 
@@ -41,26 +42,34 @@ class _LoginScreenState extends State<LoginScreen> {
     final result = await _authService.login(email, password);
 
     if (result is User) {
-      // --- CASE 1: NORMAL LOGIN SUCCESS ---
+      // --- CASE 1: LOGIN SUCCESS ---
 
-      // Activate Native SDK
+      if (!mounted) return;
+
+      // 🚀 1. CHAMELEON MAGIC: Update the App Theme immediately!
+      // This saves the colors to SecureStorage so they persist next time.
+      await Provider.of<ThemeManager>(context, listen: false)
+          .updateThemeFromUser(result);
+
+      // 2. Activate Native SDK (NFC/Wallet)
       final cardService = SmartCardService();
       await cardService.activateCard(result);
 
-      if (!mounted) return;
       setState(() => _isLoading = false);
 
+      // 3. Navigate based on Role
       if (result.role == 'STUDENT') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => StudentDashboard(user: result)),
         );
       } else {
-        _showError("Unknown Role: ${result.role}");
+        // For Admins/Guards, you might have different screens later
+        _showError("Welcome Admin! Dashboard coming soon.");
       }
 
     } else if (result is Map && result['status'] == 'FORCE_CHANGE_PASSWORD') {
-      // --- CASE 2: FIRST TIME LOGIN DETECTED ---
+      // --- CASE 2: FIRST TIME LOGIN ---
 
       setState(() => _isLoading = false);
       if (!mounted) return;
@@ -70,7 +79,8 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(
           builder: (_) => ChangeFirstPasswordScreen(
             email: result['email'],
-            tempPassword: password, // Pass current password so they don't re-type
+            // Pass current password so user doesn't have to re-type old one
+            tempPassword: password,
           ),
         ),
       );
@@ -93,9 +103,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = const Color(0xFF0F111A);
-    final cardColor = const Color(0xFF1E202C);
-    final accentBlue = const Color(0xFF3D5CFF);
+    // 🎨 LISTEN TO THEME CHANGES
+    final theme = Provider.of<ThemeManager>(context);
+
+    // Dynamic Colors based on the University
+    final bgColor = theme.backgroundColor;
+    final accentColor = theme.primaryColor;
+
+    // Glassmorphism: Neutral translucent color that works on ANY background (Red or Blue)
+    final cardColor = Colors.white.withOpacity(0.05);
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -104,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
           height: MediaQuery.of(context).size.height,
           child: Stack(
             children: [
-              // --- 1. TOP GLOW EFFECT ---
+              // --- 1. DYNAMIC GLOW EFFECTS ---
               Positioned(
                 top: -50,
                 left: -50,
@@ -114,7 +130,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 200,
                     height: 200,
                     decoration: BoxDecoration(
-                      color: accentBlue.withOpacity(0.5),
+                      // Uses the Theme's Primary Color (Blue for Tech, Red for RRC)
+                      color: accentColor.withOpacity(0.5),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -129,7 +146,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 150,
                     height: 150,
                     decoration: BoxDecoration(
-                      color: Colors.cyanAccent.withOpacity(0.3),
+                      // Uses the Theme's Secondary Color
+                      color: theme.secondaryColor.withOpacity(0.3),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -169,6 +187,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       hint: "Email",
                       icon: Icons.email_outlined,
                       bgColor: cardColor,
+                      accentColor: accentColor,
                     ),
                     const SizedBox(height: 15),
 
@@ -178,6 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       hint: "Password",
                       icon: Icons.lock_outline,
                       bgColor: cardColor,
+                      accentColor: accentColor,
                       isPassword: true,
                     ),
 
@@ -189,14 +209,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             Checkbox(
                               value: _rememberMe,
-                              activeColor: accentBlue,
+                              activeColor: accentColor,
                               side: BorderSide(color: Colors.grey[600]!),
                               onChanged: (val) => setState(() => _rememberMe = val!),
                             ),
                             Text("Remember me", style: TextStyle(color: Colors.grey[400])),
                           ],
                         ),
-                        // --- UPDATED BUTTON ---
                         TextButton(
                           onPressed: () {
                             Navigator.push(
@@ -217,7 +236,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _handleLogin,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: accentBlue,
+                          backgroundColor: accentColor, // 👈 SaaS Color
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: _isLoading
@@ -234,6 +253,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 30),
 
+                    // Footer
                     Row(
                       children: [
                         Expanded(child: Divider(color: Colors.grey[800])),
@@ -264,6 +284,7 @@ class _LoginScreenState extends State<LoginScreen> {
     required String hint,
     required IconData icon,
     required Color bgColor,
+    required Color accentColor,
     bool isPassword = false,
   }) {
     return Container(
@@ -277,6 +298,7 @@ class _LoginScreenState extends State<LoginScreen> {
         controller: controller,
         obscureText: isPassword && _isObscure,
         style: const TextStyle(color: Colors.white),
+        cursorColor: accentColor, // 👈 Cursor matches theme
         decoration: InputDecoration(
           icon: Icon(icon, color: Colors.grey[500]),
           border: InputBorder.none,
@@ -296,9 +318,9 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildSocialButton(String label, Color color, IconData icon) {
     return Container(
       height: 50,
-      width: 150, // Added width to make it look like a button
+      width: 150,
       decoration: BoxDecoration(
-        color: const Color(0xFF1E202C),
+        color: const Color(0xFF1E202C), // Keep social buttons neutral/dark
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white10),
       ),
