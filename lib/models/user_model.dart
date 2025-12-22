@@ -1,66 +1,23 @@
-import 'dart:convert';
-
-class Campus {
-  final String name;
-  final String abrev;
-  final String logoUrl;
-  final String primaryColor;
-  final String secondaryColor;
-  final String backgroundColor;
-  final String cardTextColor;
-
-  Campus({
-    required this.name,
-    required this.abrev,
-    required this.logoUrl,
-    required this.primaryColor,
-    required this.secondaryColor,
-    required this.backgroundColor,
-    required this.cardTextColor,
-  });
-
-  // Factory to safely parse JSON (Handles nulls with defaults)
-  factory Campus.fromJson(Map<String, dynamic> json) {
-    return Campus(
-      name: json['name'] ?? 'Unknown University',
-      abrev: json['abrev'] ?? 'UNIV',
-      logoUrl: json['logoUrl'] ?? '',
-      // Default to Blue Theme if backend sends null
-      primaryColor: json['primaryColor'] ?? '#3D5CFF',
-      secondaryColor: json['secondaryColor'] ?? '#2B45B5',
-      backgroundColor: json['backgroundColor'] ?? '#0F111A',
-      cardTextColor: json['cardTextColor'] ?? '#FFFFFF',
-    );
-  }
-
-  // Convert to JSON (for saving to local storage)
-  Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      'abrev': abrev,
-      'logoUrl': logoUrl,
-      'primaryColor': primaryColor,
-      'secondaryColor': secondaryColor,
-      'backgroundColor': backgroundColor,
-      'cardTextColor': cardTextColor,
-    };
-  }
-}
+import 'campus_model.dart'; // 👈 IMPORT THE NEW FILE
 
 class User {
+  final int id; // 👈 Needed for QR Generation
   final String name;
   final String email;
-  final String role; // STUDENT, GUARD, CAMPUS_ADMIN, SUPER_ADMIN
+  final String role;
   final String nfcToken;
+  final String qrSecret; // 👈 Needed for HMAC Security
   final double walletBalance;
   final bool isActive;
-  final Campus? campus; // 👈 THE NEW SAAS FIELD
+  final Campus? campus; // 👈 Now this class exists
 
   User({
+    required this.id,
     required this.name,
     required this.email,
     required this.role,
     required this.nfcToken,
+    required this.qrSecret,
     required this.walletBalance,
     required this.isActive,
     this.campus,
@@ -68,23 +25,26 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
+      id: json['id'] ?? 0,
       name: json['name'] ?? '',
       email: json['email'] ?? '',
       role: json['role'] ?? 'STUDENT',
       nfcToken: json['nfcToken'] ?? '',
+      qrSecret: json['qrSecret'] ?? '', // 👈 Catch the secret from backend
       walletBalance: (json['walletBalance'] ?? 0).toDouble(),
       isActive: json['isActive'] ?? true,
-      // Parse Nested Campus Object
       campus: json['campus'] != null ? Campus.fromJson(json['campus']) : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'name': name,
       'email': email,
       'role': role,
       'nfcToken': nfcToken,
+      'qrSecret': qrSecret,
       'walletBalance': walletBalance,
       'isActive': isActive,
       'campus': campus?.toJson(),

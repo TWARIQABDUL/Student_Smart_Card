@@ -1,13 +1,15 @@
 import 'dart:ui';
+import 'dart:async'; // 🚀 IMPORT TIMER
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:provider/provider.dart'; // 👈 Import Provider
+import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../services/smart_card_service.dart';
-import '../services/theme_manager.dart'; // 👈 Import Theme Manager
+import '../services/theme_manager.dart';
+import '../services/qr_service.dart'; // 🚀 IMPORT QR SERVICE
 import 'student_history_screen.dart';
-import 'login_screen.dart'; // For Logout
+import 'login_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   final User user;
@@ -25,12 +27,40 @@ class _StudentDashboardState extends State<StudentDashboard> {
 
   // --- NFC STATE ---
   bool _isActive = false;
-  int _nfcStatus = -1; // -1: Loading, 0: Ready, 1: Disabled, 2: Missing
+  int _nfcStatus = -1;
+
+  // --- 🚀 DYNAMIC QR STATE ---
+  String _dynamicQrData = "Loading...";
+  Timer? _qrTimer;
 
   @override
   void initState() {
     super.initState();
     _checkHardware();
+
+    // 🚀 START TIMER (Refresh every 1 second)
+    _updateQr();
+    _qrTimer = Timer.periodic(const Duration(seconds: 30), (t) => _updateQr());
+  }
+
+  @override
+  void dispose() {
+    _qrTimer?.cancel(); // 🚀 CLEANUP TIMER
+    super.dispose();
+  }
+
+  // 🚀 GENERATE SECURE TOKEN
+  void _updateQr() {
+    if (mounted) {
+      setState(() {
+        // Uses the User ID and Secret to create the time-based token
+        // Example output: "5:1709882233000:Base64Signature"
+        _dynamicQrData = QrService.generateDynamicToken(
+            widget.user.id.toString(),
+            widget.user.qrSecret
+        );
+      });
+    }
   }
 
   Future<void> _checkHardware() async {
@@ -54,10 +84,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
   }
 
   void _handleLogout() {
-    // 1. Reset Theme to Default
     Provider.of<ThemeManager>(context, listen: false).resetTheme();
-
-    // 2. Navigate back to Login
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -68,30 +95,25 @@ class _StudentDashboardState extends State<StudentDashboard> {
   // --- MAIN BUILD ---
   @override
   Widget build(BuildContext context) {
-    // 🎨 LISTEN TO THEME
     final theme = Provider.of<ThemeManager>(context);
 
     return Scaffold(
-      backgroundColor: theme.backgroundColor, // 👈 Dynamic Background
-
-      // 1. SWITCH BETWEEN PAGES
+      backgroundColor: theme.backgroundColor,
       body: IndexedStack(
         index: _selectedIndex,
         children: [
-          _buildWalletPage(theme),     // Pass theme to widgets
+          _buildWalletPage(theme),
           const StudentHistoryScreen(),
         ],
       ),
-
-      // 2. BOTTOM NAVIGATION BAR
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: Colors.white10, width: 1)),
         ),
         child: BottomNavigationBar(
-          backgroundColor: theme.backgroundColor, // 👈 Dynamic Nav Bar
+          backgroundColor: theme.backgroundColor,
           elevation: 0,
-          selectedItemColor: theme.primaryColor,  // 👈 Dynamic Active Icon
+          selectedItemColor: theme.primaryColor,
           unselectedItemColor: Colors.white38,
           selectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold),
           unselectedLabelStyle: GoogleFonts.poppins(),
@@ -114,7 +136,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  // --- WALLET PAGE ---
   Widget _buildWalletPage(ThemeManager theme) {
     return Scaffold(
       backgroundColor: theme.backgroundColor,
@@ -141,10 +162,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
             const SizedBox(height: 10),
             _buildNfcStatusChip(),
             const SizedBox(height: 25),
-            _buildDigitalCard(theme), // 👈 Pass Theme
+            _buildDigitalCard(theme),
             const SizedBox(height: 40),
-
-            // Action Button
             if (_nfcStatus != 2)
               SizedBox(
                 width: double.infinity,
@@ -152,7 +171,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 child: ElevatedButton(
                   onPressed: _isActive ? _deactivateCard : _activateCard,
                   style: ElevatedButton.styleFrom(
-                    // 👈 Dynamic Button Colors
                     backgroundColor: _isActive
                         ? Colors.redAccent.withOpacity(0.2)
                         : theme.primaryColor,
@@ -173,7 +191,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  // --- HELPERS ---
   Widget _buildNfcStatusChip() {
     Color color = Colors.grey;
     String text = "CHECKING...";
@@ -215,7 +232,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
     return Stack(
       alignment: Alignment.center,
       children: [
-        // 1. ACTIVE GLOW EFFECT (Only visible when NFC is ON)
         if (_isActive)
           Positioned(
             bottom: -10,
@@ -236,25 +252,21 @@ class _StudentDashboardState extends State<StudentDashboard> {
             ),
           ),
 
-        // 2. THE CARD ITSELF
         Container(
           height: 220,
           width: double.infinity,
           padding: const EdgeInsets.all(25),
           decoration: BoxDecoration(
-            // 🚀 FIX: Always use Theme Colors (removed the _isActive check for colors)
             gradient: LinearGradient(
               colors: [theme.primaryColor, theme.secondaryColor],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(24),
-            // Add a subtle border to make it pop
             border: Border.all(
                 color: Colors.white.withOpacity(0.2),
                 width: 1
             ),
-            // Add a permanent subtle shadow so it looks like a card
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.3),
@@ -269,20 +281,16 @@ class _StudentDashboardState extends State<StudentDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // SIM Chip Icon
                   Icon(
                       _nfcStatus == 2 ? Icons.no_sim_outlined : Icons.sim_card,
-                      // Turn red if hardware error, otherwise Gold
                       color: _nfcStatus == 2 ? Colors.redAccent : Colors.amber,
                       size: 40
                   ),
-                  // Contactless Icon (Always visible now, just simpler)
                   const Icon(Icons.contactless, color: Colors.white54, size: 30),
                 ],
               ),
               const Spacer(),
 
-              // Balance
               Text(
                   "\$${widget.user.walletBalance.toStringAsFixed(2)}",
                   style: GoogleFonts.poppins(
@@ -293,7 +301,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
               ),
               const SizedBox(height: 5),
 
-              // Name and QR
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -309,7 +316,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
                           )
                       ),
                       Text(
-                        // Display Campus Name
                           widget.user.campus?.name ?? widget.user.role,
                           style: GoogleFonts.poppins(
                               color: theme.cardTextColor.withOpacity(0.8),
@@ -318,7 +324,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       ),
                     ],
                   ),
-                  // QR Code
+                  // 🚀 UPDATED: USE DYNAMIC DATA HERE
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
@@ -326,8 +332,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
                         borderRadius: BorderRadius.circular(8)
                     ),
                     child: QrImageView(
-                        data: widget.user.nfcToken,
-                        size: 45,
+                        data: _dynamicQrData, // 👈 THE CHANGING DATA
+                        size: 60,
                         padding: EdgeInsets.zero,
                         backgroundColor: Colors.white
                     ),
