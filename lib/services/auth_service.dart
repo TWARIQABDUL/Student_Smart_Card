@@ -6,7 +6,13 @@ import '../models/user_model.dart';
 class AuthService {
   // ⚠️ UPDATE: Ensure this matches your backend URL
   static const String baseUrl = 'https://student-smart-card-backend.onrender.com/api/v1';
-  final _storage = const FlutterSecureStorage();
+
+  // 🚀 IOS & ANDROID COMPATIBILITY UPDATE
+  // We configure specific options for iOS (Keychain) and Android (EncryptedSharedPrefs)
+  final _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
 
   // --- 1. LOGIN (UPDATED) ---
   Future<dynamic> login(String email, String password) async {
@@ -24,8 +30,10 @@ class AuthService {
         if (body['status'] == 'FORCE_CHANGE_PASSWORD') {
           return body; // Return the whole map so UI knows to redirect
         }
+        print("Logged in! ${body}");
 
         // Normal Success
+        // Saves to Keychain (iOS) or EncryptedPrefs (Android)
         await _storage.write(key: 'jwt_token', value: body['token']);
         return User.fromJson(body['user']);
       } else {
@@ -65,7 +73,21 @@ class AuthService {
 
   // ... keep resetPassword method ...
   Future<String?> resetPassword(String email, String newPassword) async {
-    // (Your existing code here)
-    return null;
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/reset-password'), // Ensure this endpoint exists
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email, 'newPassword': newPassword}),
+      );
+
+      if (response.statusCode == 200) {
+        return null; // Success
+      } else {
+        final body = jsonDecode(response.body);
+        return body['error'] ?? 'Reset failed';
+      }
+    } catch (e) {
+      return 'Connection error';
+    }
   }
 }

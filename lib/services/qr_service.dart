@@ -18,8 +18,13 @@ class QrService {
     var hmac = Hmac(sha256, key);
     var digest = hmac.convert(bytes);
 
-    // 4. Return format (Base64 signature)
-    String signature = base64.encode(digest.bytes);
+    // 4. FIX: Use base64Url (URL Safe) and remove Padding ('=')
+    String signature = base64Url.encode(digest.bytes);
+
+    // Java's .withoutPadding() removes '=', so we must too.
+    if (signature.endsWith('=')) {
+      signature = signature.replaceAll('=', '');
+    }
 
     return "$payload:$signature";
   }

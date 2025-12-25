@@ -2,10 +2,10 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.student_card_app">
 <!-- this will be removed on production-->
-    <uses-sdk
-        tools:overrideLibrary="com.example.card_emulator"
-        android:minSdkVersion="26"
-         />
+<!--    <uses-sdk-->
+<!--        tools:overrideLibrary="com.example.card_emulator"-->
+<!--        android:minSdkVersion="26"-->
+<!--         />-->
     <!-- this will be removed on production-->
 
     <uses-permission android:name="android.permission.NFC" />
@@ -15,7 +15,7 @@
     <application
         android:label="student_card_app"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/launcher_icon">
         <activity
             android:name=".MainActivity"
             android:exported="true"

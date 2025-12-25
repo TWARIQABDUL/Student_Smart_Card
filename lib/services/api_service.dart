@@ -1,18 +1,22 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // <--- CHANGE THIS
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
   static const String baseUrl = 'https://student-smart-card-backend.onrender.com/api/v1';
 
-  // Create the storage instance
-  final _storage = const FlutterSecureStorage();
+  // 🚀 CRITICAL: Use the SAME options as AuthService!
+  // If AuthService writes to 'encryptedSharedPreferences', we must read from there too.
+  final _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
 
   // --- GET MY LOGS ---
   Future<List<Map<String, dynamic>>> getMyHistory() async {
     try {
       // 1. Get the Saved JWT Token from SECURE STORAGE
-      final String? token = await _storage.read(key: 'jwt_token'); // <--- FIXED
+      final String? token = await _storage.read(key: 'jwt_token');
 
       if (token == null) throw Exception("Not Logged In");
 

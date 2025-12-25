@@ -1,5 +1,6 @@
+import 'dart:io'; // 🚀 IMPORT PLATFORM
 import 'dart:ui';
-import 'dart:async'; // 🚀 IMPORT TIMER
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -7,7 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../services/smart_card_service.dart';
 import '../services/theme_manager.dart';
-import '../services/qr_service.dart'; // 🚀 IMPORT QR SERVICE
+import '../services/qr_service.dart';
 import 'student_history_screen.dart';
 import 'login_screen.dart';
 
@@ -29,7 +30,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
   bool _isActive = false;
   int _nfcStatus = -1;
 
-  // --- 🚀 DYNAMIC QR STATE ---
+  // --- DYNAMIC QR STATE ---
   String _dynamicQrData = "Loading...";
   Timer? _qrTimer;
 
@@ -38,35 +39,39 @@ class _StudentDashboardState extends State<StudentDashboard> {
     super.initState();
     _checkHardware();
 
-    // 🚀 START TIMER (Refresh every 1 second)
+    // Start QR Timer
     _updateQr();
     _qrTimer = Timer.periodic(const Duration(seconds: 30), (t) => _updateQr());
   }
 
   @override
   void dispose() {
-    _qrTimer?.cancel(); // 🚀 CLEANUP TIMER
+    _qrTimer?.cancel();
     super.dispose();
   }
 
-  // 🚀 GENERATE SECURE TOKEN
   void _updateQr() {
     if (mounted) {
       setState(() {
-        // Uses the User ID and Secret to create the time-based token
-        // Example output: "5:1709882233000:Base64Signature"
         _dynamicQrData = QrService.generateDynamicToken(
             widget.user.id.toString(),
             widget.user.qrSecret
         );
       });
+      print("QR Updated!${widget.user.qrSecret}");
     }
   }
 
   Future<void> _checkHardware() async {
+    // 1. Get Status (Returns 2 for iOS/Simulation)
     int status = await _cardService.checkNfcStatus();
     if (mounted) setState(() => _nfcStatus = status);
 
+    // 2. 🚀 CRITICAL: Always save data to Secure Storage (Hybrid Sync)
+    // This ensures offline mode works on iOS even without NFC activation
+    await _cardService.saveUserData(widget.user);
+
+    // 3. Only Activate NFC if hardware is ready (Android)
     if (status == 0 && widget.user.isActive) {
       _activateCard();
     }
@@ -164,6 +169,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
             const SizedBox(height: 25),
             _buildDigitalCard(theme),
             const SizedBox(height: 40),
+
+            // 🚀 HIDE BUTTON ON IOS (NfcStatus == 2)
             if (_nfcStatus != 2)
               SizedBox(
                 width: double.infinity,
@@ -196,6 +203,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
     String text = "CHECKING...";
     IconData icon = Icons.hourglass_empty;
 
+    // Check for iOS Simulation Flag
+    bool isIos = Platform.isIOS || SmartCardService.isIosSimulation;
+
     if (_nfcStatus == 0) {
       color = Colors.greenAccent;
       text = "NFC READY";
@@ -205,9 +215,16 @@ class _StudentDashboardState extends State<StudentDashboard> {
       text = "NFC DISABLED";
       icon = Icons.settings_remote;
     } else if (_nfcStatus == 2) {
-      color = Colors.redAccent;
-      text = "NFC NOT SUPPORTED";
-      icon = Icons.error_outline;
+      // 🚀 CUSTOMIZE FOR IOS
+      if (isIos) {
+        color = Colors.cyanAccent;
+        text = "QR MODE ACTIVE";
+        icon = Icons.qr_code_2;
+      } else {
+        color = Colors.redAccent;
+        text = "NFC NOT SUPPORTED";
+        icon = Icons.error_outline;
+      }
     }
 
     return Container(
@@ -229,6 +246,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
   }
 
   Widget _buildDigitalCard(ThemeManager theme) {
+    // Check for iOS Simulation Flag
+    bool isIos = Platform.isIOS || SmartCardService.isIosSimulation;
+
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -281,9 +301,14 @@ class _StudentDashboardState extends State<StudentDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // 🚀 SMART ICON: Show Card for NFC, QR for iOS
                   Icon(
-                      _nfcStatus == 2 ? Icons.no_sim_outlined : Icons.sim_card,
-                      color: _nfcStatus == 2 ? Colors.redAccent : Colors.amber,
+                      _nfcStatus == 2
+                          ? (isIos ? Icons.qr_code_scanner : Icons.no_sim_outlined)
+                          : Icons.sim_card,
+                      color: _nfcStatus == 2
+                          ? (isIos ? Colors.white : Colors.redAccent)
+                          : Colors.amber,
                       size: 40
                   ),
                   const Icon(Icons.contactless, color: Colors.white54, size: 30),
@@ -324,7 +349,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       ),
                     ],
                   ),
-                  // 🚀 UPDATED: USE DYNAMIC DATA HERE
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
@@ -332,7 +356,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                         borderRadius: BorderRadius.circular(8)
                     ),
                     child: QrImageView(
-                        data: _dynamicQrData, // 👈 THE CHANGING DATA
+                        data: _dynamicQrData,
                         size: 60,
                         padding: EdgeInsets.zero,
                         backgroundColor: Colors.white

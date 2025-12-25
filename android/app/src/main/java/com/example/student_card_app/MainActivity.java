@@ -1,4 +1,4 @@
-package com.example.student_card_app; // ⚠️ Make sure this matches your AndroidManifest package!
+package com.example.student_card_app; // ⚠️ Match your AndroidManifest
 
 import androidx.annotation.NonNull;
 import io.flutter.embedding.android.FlutterActivity;
@@ -7,13 +7,13 @@ import io.flutter.plugin.common.MethodChannel;
 
 // Import your SDK Classes
 import com.example.card_emulator.StudentCardManager;
-import com.example.card_emulator.db.WalletEntity; // Import the Entity to read data
+import com.example.card_emulator.db.WalletEntity;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class MainActivity extends FlutterActivity {
-    // ⚠️ MUST MATCH Flutter "static const platform = MethodChannel(...)"
+    // ⚠️ MUST MATCH Flutter: static const platform = MethodChannel(...)"
     private static final String CHANNEL = "com.example.student_card_app/nfc";
 
     @Override
@@ -25,7 +25,7 @@ public class MainActivity extends FlutterActivity {
                         (call, result) -> {
                             switch (call.method) {
 
-                                // --- 1. ACTIVATE CARD (Full Profile) ---
+                                // --- 1. ACTIVATE CARD (SECURE) ---
                                 case "activateCard":
                                     String token = call.argument("nfcToken");
                                     String name = call.argument("name");
@@ -36,11 +36,12 @@ public class MainActivity extends FlutterActivity {
                                     Boolean isActive = call.argument("isActive");
 
                                     if (token != null) {
-                                        // A. Start NFC Logic
+                                        // A. Start NFC Logic & Check Security
                                         int status = StudentCardManager.activateCard(this, token);
 
+                                        // B. Handle Result Codes
                                         if (status == StudentCardManager.STATUS_SUCCESS) {
-                                            // B. Save Full Data for Offline Use
+                                            // ✅ Success: Save Data for Offline Mode
                                             StudentCardManager.saveUserData(
                                                     this,
                                                     token,
@@ -52,8 +53,18 @@ public class MainActivity extends FlutterActivity {
                                                     isActive != null ? isActive : true
                                             );
                                             result.success("Card Activated");
+
+                                        } else if (status == StudentCardManager.STATUS_DEVICE_ROOTED) {
+                                            // 🚨 Rooted Device Detected
+                                            result.error("SEC_ERROR", "Device is Rooted. Access Denied.", null);
+
+                                        } else if (status == StudentCardManager.STATUS_APP_TAMPERED) {
+                                            // 🚨 Modified APK Detected
+                                            result.error("SEC_ERROR", "App has been modified. Re-install from official source.", null);
+
                                         } else {
-                                            result.error("SECURITY_ERROR", "Code: " + status, null);
+                                            // ⚠️ Unknown Error
+                                            result.error("ERR_UNKNOWN", "Activation failed. Code: " + status, null);
                                         }
                                     } else {
                                         result.error("ERROR", "Token is null", null);
