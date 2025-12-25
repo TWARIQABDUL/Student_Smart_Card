@@ -14,7 +14,7 @@ class SmartCardService {
 
   // ⚠️ TEST FLAG: Set 'true' to simulate iOS behavior on Android.
   // Set 'false' for Production!
-  static const bool isIosSimulation = true;
+  static const bool isIosSimulation = false;
 
   // --- 1. CHECK NFC STATUS ---
   // Returns: 0=Ready, 1=Disabled, 2=Not Supported

@@ -301,17 +301,21 @@ class _StudentDashboardState extends State<StudentDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // 🚀 SMART ICON: Show Card for NFC, QR for iOS
-                  Icon(
-                      _nfcStatus == 2
-                          ? (isIos ? Icons.qr_code_scanner : Icons.no_sim_outlined)
-                          : Icons.sim_card,
-                      color: _nfcStatus == 2
-                          ? (isIos ? Colors.white : Colors.redAccent)
-                          : Colors.amber,
-                      size: 40
+                  Text(
+                      "Student Card",
+                      style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 18
+                      )
                   ),
-                  const Icon(Icons.contactless, color: Colors.white54, size: 30),
+
+                  // 🚀 FIX: Use 'Icons.wifi_off' because 'contactless_disabled' doesn't exist
+                  Icon(
+                      _nfcStatus == 0 ? Icons.contactless : Icons.wifi_off,
+                      color: _nfcStatus == 0 ? Colors.white54 : Colors.redAccent.withOpacity(0.5),
+                      size: 30
+                  ),
                 ],
               ),
               const Spacer(),
