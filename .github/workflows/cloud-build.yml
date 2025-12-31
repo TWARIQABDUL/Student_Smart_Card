@@ -69,8 +69,9 @@ jobs:
           echo "use_https = True" >> ~/.s3cfg
 
           # 2. Download the private file
-          echo "⬇️ Downloading card-emulator-release.aar from Bucket: $BUCKET..."
-          s3cmd get s3://$BUCKET/card-emulator-release.aar card-emulator.aar
+          # 👇 FIXED: Now looks inside the 'sdk/' folder
+          echo "⬇️ Downloading from s3://$BUCKET/sdk/card-emulator-release.aar"
+          s3cmd get s3://$BUCKET/sdk/card-emulator-release.aar card-emulator.aar
 
           # 3. Tell Gradle where we put it
           echo "AAR_PATH=$(pwd)/card-emulator.aar" >> $GITHUB_ENV
