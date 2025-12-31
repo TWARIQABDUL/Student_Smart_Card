@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://student-smart-card-backend.onrender.com/api/v1';
+  static const String baseUrl = 'http://api.electronsedgesolutions.tech/api/v1';
 
   // 🚀 CRITICAL: Use the SAME options as AuthService!
   // If AuthService writes to 'encryptedSharedPreferences', we must read from there too.

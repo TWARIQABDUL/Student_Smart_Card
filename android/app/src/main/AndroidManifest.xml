@@ -13,7 +13,7 @@
 
 
     <application
-        android:label="student_card_app"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity

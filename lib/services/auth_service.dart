@@ -5,7 +5,7 @@ import '../models/user_model.dart';
 
 class AuthService {
   // ⚠️ UPDATE: Ensure this matches your backend URL
-  static const String baseUrl = 'https://student-smart-card-backend.onrender.com/api/v1';
+  static const String baseUrl = 'http://api.electronsedgesolutions.tech/api/v1';
 
   // 🚀 IOS & ANDROID COMPATIBILITY UPDATE
   // We configure specific options for iOS (Keychain) and Android (EncryptedSharedPrefs)
