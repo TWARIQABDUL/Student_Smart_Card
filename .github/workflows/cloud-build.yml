@@ -1,21 +1,21 @@
 name: On-Demand Cloud Build
 
 on:
-  # 1. Trigger via API (Spring Boot Backend)
+  # 1. AUTOMATION: Trigger via API (Spring Boot Backend)
   repository_dispatch:
     types: [build-client-apk]
    
-  # 2. Trigger via Button (Manual Testing)
+  # 2. MANUAL: Trigger via Button (For Debugging)
   workflow_dispatch:
     inputs:
       app_name:
         description: 'App Name'
         required: true
-        default: 'Test School App'
+        default: 'Manual Test App'
       package_id:
         description: 'Package ID'
         required: true
-        default: 'com.test.school'
+        default: 'com.manual.test'
       logo_url:
         description: 'Logo URL (PNG)'
         required: true
@@ -40,7 +40,7 @@ jobs:
           channel: 'stable'
 
       # ---------------------------------------------------------
-      # 🔐 STEP 1: RESTORE KEYSTORE (From Base64 Secret)
+      # 🔐 STEP 1: RESTORE KEYSTORE
       # ---------------------------------------------------------
       - name: Decode Keystore
         run: |
@@ -48,7 +48,7 @@ jobs:
           echo "KEYSTORE_PATH=$(pwd)/release.jks" >> $GITHUB_ENV
 
       # ---------------------------------------------------------
-      # ☁️ STEP 2: DOWNLOAD SDK (From DigitalOcean Spaces)
+      # ☁️ STEP 2: DOWNLOAD SDK (From DigitalOcean)
       # ---------------------------------------------------------
       - name: Install s3cmd
         run: sudo apt-get -y install s3cmd
@@ -60,7 +60,6 @@ jobs:
           BUCKET: ${{ secrets.DO_BUCKET }}
           REGION: ${{ secrets.DO_REGION }}
         run: |
-          # 1. Configure s3cmd for DigitalOcean (sgp1)
           echo "[default]" > ~/.s3cfg
           echo "access_key = $ACCESS_KEY" >> ~/.s3cfg
           echo "secret_key = $SECRET_KEY" >> ~/.s3cfg
@@ -68,11 +67,11 @@ jobs:
           echo "host_bucket = %(bucket)s.${REGION}.digitaloceanspaces.com" >> ~/.s3cfg
           echo "use_https = True" >> ~/.s3cfg
 
-          # 2. Download the private SDK from the 'sdk/' folder
-          echo "⬇️ Downloading from s3://$BUCKET/sdk/card-emulator-release.aar"
+          # Download the private SDK
+          echo "⬇️ Downloading SDK..."
           s3cmd get s3://$BUCKET/sdk/card-emulator-release.aar card-emulator.aar
 
-          # 3. Tell Gradle where we put it
+          # Tell Gradle where it is
           echo "AAR_PATH=$(pwd)/card-emulator.aar" >> $GITHUB_ENV
 
       # ---------------------------------------------------------
@@ -80,23 +79,24 @@ jobs:
       # ---------------------------------------------------------
       - name: Generate Custom Icons
         run: |
-          # Determine Input Source (API vs Manual Button)
+          # 1. Determine Input Source (API vs Manual)
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             LOGO_URL="${{ github.event.inputs.logo_url }}"
           else
             LOGO_URL="${{ github.event.client_payload.logo_url }}"
           fi
            
+          # 2. Download Logo
           echo "⬇️ Downloading logo from: $LOGO_URL"
           curl -o client_logo.png "$LOGO_URL"
            
-          # Create config for icon generator
+          # 3. Create config for icon generator
           echo "flutter_launcher_icons:" > flutter_launcher_icons.yaml
           echo "  android: true" >> flutter_launcher_icons.yaml
           echo "  ios: false" >> flutter_launcher_icons.yaml
           echo "  image_path: 'client_logo.png'" >> flutter_launcher_icons.yaml
            
-          # Generate the icons
+          # 4. Run Generator
           dart run flutter_launcher_icons
 
       # ---------------------------------------------------------
@@ -108,56 +108,49 @@ jobs:
           CLOUD_APP_NAME: ${{ github.event.inputs.app_name || github.event.client_payload.app_name }}
           CLOUD_APP_ID: ${{ github.event.inputs.package_id || github.event.client_payload.package_id }}
            
-          # Pass Secrets to Gradle
+          # Pass Secrets
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: flutter build apk --release
 
       # ---------------------------------------------------------
-      # 📤 STEP 5: UPLOAD APK TO DIGITALOCEAN
+      # 📤 STEP 5: UPLOAD TO DIGITALOCEAN
       # ---------------------------------------------------------
       - name: Upload APK to DO Spaces
         env:
           BUCKET: ${{ secrets.DO_BUCKET }}
-          REGION: ${{ secrets.DO_REGION }}
-          # Grab the Package ID (e.g., com.test.school) to use as the filename
+          # Handle inputs for both Button and API
           PACKAGE_ID: ${{ github.event.inputs.package_id || github.event.client_payload.package_id }}
         run: |
-          # 1. Rename the generic output to the specific package ID
+          # Rename output
           mv build/app/outputs/flutter-apk/app-release.apk $PACKAGE_ID.apk
 
-          # 2. Upload to the 'apk' folder in your bucket
-          #    (s3cmd is already configured from Step 2)
-          echo "⬆️ Uploading $PACKAGE_ID.apk to s3://$BUCKET/apk/"
+          # Upload to 'apk/' folder
+          echo "⬆️ Uploading $PACKAGE_ID.apk..."
           s3cmd put $PACKAGE_ID.apk s3://$BUCKET/apk/ --acl-public
-
-          # 3. Output the final link for logs
-          echo "::notice::Uploaded to s3://$BUCKET/apk/$PACKAGE_ID.apk"
 
       # ---------------------------------------------------------
       # 📞 STEP 6: NOTIFY BACKEND (CALLBACK)
       # ---------------------------------------------------------
       - name: Notify Backend
-        if: always() # Run this even if the build failed!
+        if: always() # Run even if build failed
         env:
           BUCKET: ${{ secrets.DO_BUCKET }}
           REGION: ${{ secrets.DO_REGION }}
           PACKAGE_ID: ${{ github.event.inputs.package_id || github.event.client_payload.package_id }}
         run: |
-          # 1. Map GitHub Status to Java Enum (COMPLETED / FAILED)
           if [ "${{ job.status }}" == "success" ]; then
             API_STATUS="COMPLETED"
           else
             API_STATUS="FAILED"
           fi
 
-          # 2. Construct the URL (Using sgp1 region)
           DL_URL="https://$BUCKET.$REGION.digitaloceanspaces.com/apk/$PACKAGE_ID.apk"
           
-          # 3. Send POST request to your Production Backend
-          echo "📞 Calling Webhook for $PACKAGE_ID ($API_STATUS)"
+          echo "📞 Webhook: $API_STATUS for $PACKAGE_ID"
           
+          # Send result back to your server
           curl -X POST -H "Content-Type: application/json" \
                -d "{\"status\": \"$API_STATUS\", \"download_url\": \"$DL_URL\", \"package_id\": \"$PACKAGE_ID\"}" \
                https://api.electronsedgesolutions.tech/api/v1/webhooks/build-status
