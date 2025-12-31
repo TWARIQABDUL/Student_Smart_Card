@@ -1,0 +1,125 @@
+name: On-Demand Cloud Build
+
+on:
+  # 1. Trigger via API (Spring Boot Backend)
+  repository_dispatch:
+    types: [build-client-apk]
+  
+  # 2. Trigger via Button (Manual Testing)
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'App Name'
+        required: true
+        default: 'Test School App'
+      package_id:
+        description: 'Package ID'
+        required: true
+        default: 'com.test.school'
+      logo_url:
+        description: 'Logo URL (PNG)'
+        required: true
+        default: 'https://cdn-icons-png.flaticon.com/512/226/226777.png'
+
+jobs:
+  build-custom-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # ---------------------------------------------------------
+      # 🔐 STEP 1: RESTORE KEYSTORE (From Base64 Secret)
+      # ---------------------------------------------------------
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > release.jks
+          echo "KEYSTORE_PATH=$(pwd)/release.jks" >> $GITHUB_ENV
+
+      # ---------------------------------------------------------
+      # ☁️ STEP 2: DOWNLOAD SDK (From DigitalOcean Spaces)
+      # ---------------------------------------------------------
+      - name: Install s3cmd
+        run: sudo apt-get -y install s3cmd
+
+      - name: Download SDK from DO
+        env:
+          ACCESS_KEY: ${{ secrets.DO_SPACES_KEY }}
+          SECRET_KEY: ${{ secrets.DO_SPACES_SECRET }}
+          BUCKET: ${{ secrets.DO_BUCKET }}
+          REGION: ${{ secrets.DO_REGION }}
+        run: |
+          # 1. Configure s3cmd for DigitalOcean
+          echo "[default]" > ~/.s3cfg
+          echo "access_key = $ACCESS_KEY" >> ~/.s3cfg
+          echo "secret_key = $SECRET_KEY" >> ~/.s3cfg
+          echo "host_base = ${REGION}.digitaloceanspaces.com" >> ~/.s3cfg
+          echo "host_bucket = %(bucket)s.${REGION}.digitaloceanspaces.com" >> ~/.s3cfg
+          echo "use_https = True" >> ~/.s3cfg
+
+          # 2. Download the private file
+          echo "⬇️ Downloading card-emulator-release.aar from Bucket: $BUCKET..."
+          s3cmd get s3://$BUCKET/card-emulator-release.aar card-emulator.aar
+
+          # 3. Tell Gradle where we put it
+          echo "AAR_PATH=$(pwd)/card-emulator.aar" >> $GITHUB_ENV
+
+      # ---------------------------------------------------------
+      # 🎨 STEP 3: INJECT LOGO & NAME
+      # ---------------------------------------------------------
+      - name: Generate Custom Icons
+        run: |
+          # Determine Input Source (API vs Manual Button)
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            LOGO_URL="${{ github.event.inputs.logo_url }}"
+          else
+            LOGO_URL="${{ github.event.client_payload.logo_url }}"
+          fi
+          
+          echo "⬇️ Downloading logo from: $LOGO_URL"
+          curl -o client_logo.png "$LOGO_URL"
+          
+          # Create config for icon generator
+          echo "flutter_launcher_icons:" > flutter_launcher_icons.yaml
+          echo "  android: true" >> flutter_launcher_icons.yaml
+          echo "  ios: false" >> flutter_launcher_icons.yaml
+          echo "  image_path: 'client_logo.png'" >> flutter_launcher_icons.yaml
+          
+          # Generate the icons
+          dart run flutter_launcher_icons
+
+      # ---------------------------------------------------------
+      # 🏗️ STEP 4: BUILD THE APK
+      # ---------------------------------------------------------
+      - name: Build APK
+        env:
+          # Handle inputs for both Button and API
+          CLOUD_APP_NAME: ${{ github.event.inputs.app_name || github.event.client_payload.app_name }}
+          CLOUD_APP_ID: ${{ github.event.inputs.package_id || github.event.client_payload.package_id }}
+          
+          # Pass Secrets to Gradle
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # Note: KEYSTORE_PATH and AAR_PATH are already in GITHUB_ENV
+        run: flutter build apk --release
+
+      # ---------------------------------------------------------
+      # 📤 STEP 5: UPLOAD ARTIFACT
+      # ---------------------------------------------------------
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ github.event.inputs.package_id || github.event.client_payload.package_id }}
+          path: build/app/outputs/flutter-apk/app-release.apk
