@@ -152,5 +152,6 @@ jobs:
           
           # Send result back to your server
           curl -X POST -H "Content-Type: application/json" \
+               -H "X-Electron-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
                -d "{\"status\": \"$API_STATUS\", \"download_url\": \"$DL_URL\", \"package_id\": \"$PACKAGE_ID\"}" \
                https://api.electronsedgesolutions.tech/api/v1/webhooks/build-status
